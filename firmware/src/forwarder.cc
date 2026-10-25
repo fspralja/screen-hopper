@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include <bsp/board.h>
 #include <tusb.h>
 
@@ -8,10 +10,27 @@
 #define FORWARDER_UART uart1
 #define FORWARDER_RX_PIN 9
 
+// Hardcoded for now: swap left Ctrl and left Alt on this PC.
+#define MOD_LCTRL 0x01
+#define MOD_LALT 0x04
+#define KEYBOARD_REPORT_ID 2  // matches REPORT_ID_KEYBOARD in our_descriptor.cc
+
 bool led_state = false;
 
 void serial_callback(const uint8_t* data, uint16_t len) {
-    tud_hid_report(data[0], data + 1, len - 1);
+    if (data[0] == KEYBOARD_REPORT_ID && len >= 2) {
+        uint8_t report[SERIAL_MAX_PAYLOAD_SIZE];
+        memcpy(report, data + 1, len - 1);
+        uint8_t mods = report[0] & ~(MOD_LCTRL | MOD_LALT);
+        if (report[0] & MOD_LCTRL)
+            mods |= MOD_LALT;
+        if (report[0] & MOD_LALT)
+            mods |= MOD_LCTRL;
+        report[0] = mods;
+        tud_hid_report(data[0], report, len - 1);
+    } else {
+        tud_hid_report(data[0], data + 1, len - 1);
+    }
     board_led_write(led_state);
     led_state = !led_state;
 }
